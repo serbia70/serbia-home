@@ -7,7 +7,6 @@ from scraper.utils import listing_id
 
 
 class CityexpertScraper:
-    """Angular SSR site - extract all prices and match with nearby links."""
     SEARCH_URL = "https://www.cityexpert.rs/prodaja-nekretnina/beograd"
 
     async def __aenter__(self):
@@ -17,60 +16,56 @@ class CityexpertScraper:
         pass
 
     async def scrape(self) -> List[Listing]:
+        import html as html_mod
+
         req = Request(self.SEARCH_URL, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html",
         })
-        html = urlopen(req, timeout=30).read().decode("utf-8")
+        page = urlopen(req, timeout=30).read().decode("utf-8")
 
-        # Find all listing URLs with their positions
-        link_positions = []
-        for m in re.finditer(r'href="(/prodaja-nekretnina/beograd/\d+[^"]*)"', html):
-            link_positions.append((m.start(), m.group(1)))
+        # Split page into card chunks by property-card class
+        cards = re.split(r'<div[^>]*class="[^"]*property-card[^"]*"[^>]*>', page)[1:]
 
-        # Find all prices with their positions
-        price_positions = []
-        for m in re.finditer(r'>([\d.]+)\s*€<', html):
+        seen = set()
+        listings = []
+
+        for card in cards:
+            # Find listing link within this card
+            link_m = re.search(r'href="(/prodaja-nekretnina/beograd/\d+[^"]*)"', card)
+            if not link_m:
+                continue
+            href = link_m.group(1)
+            if href in seen:
+                continue
+            seen.add(href)
+
+            # Find price within this card (first occurrence is total price)
+            price_m = re.search(r'([\d.]+)\s*€', card)
+            if not price_m:
+                continue
             try:
-                price = float(m.group(1).replace(".", ""))
+                price = float(price_m.group(1).replace(".", ""))
             except ValueError:
                 continue
-            if 100000 >= price > 0:
-                price_positions.append((m.start(), price))
-
-        # Match each price to its nearest link
-        listings = []
-        seen = set()
-
-        for ppos, price in price_positions:
-            # Find closest link before the price (within 1000 chars)
-            best_link = None
-            best_dist = 999999
-
-            for lpos, href in link_positions:
-                dist = abs(ppos - lpos)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_link = href
-
-            if not best_link or best_link in seen or best_dist > 3000:
+            if price > 100000 or price == 0:
                 continue
-            seen.add(best_link)
 
-            full_url = f"https://www.cityexpert.rs{best_link}"
+            # Find area
+            area_m = re.search(r'(\d+)\s*m²', card)
+            area = float(area_m.group(1)) if area_m else None
 
-            # Get context around the price for area/title
-            chunk = html[max(0, ppos - 800):ppos + 500]
-            title_m = re.search(r'alt="([^"]*)"', chunk)
-            area_m = re.search(r'(\d+)\s*m²', chunk)
+            # Extract alt text from images
+            img_m = re.search(r'<img[^>]*src="([^"]*)"', card)
+            title_m = re.search(r'alt="([^"]*)"', card)
 
             listings.append(Listing(
-                id=listing_id(full_url),
-                title=(title_m.group(1) if title_m else "")[:100],
+                id=listing_id(f"https://www.cityexpert.rs{href}"),
+                title=html_mod.unescape(title_m.group(1))[:100] if title_m else "",
                 price_eur=price,
-                area_sqm=float(area_m.group(1)) if area_m else None,
-                url=full_url,
+                area_sqm=area,
+                url=f"https://www.cityexpert.rs{href}",
                 source="cityexpert",
+                image_url=img_m.group(1) if img_m else None,
             ))
 
         return listings
