@@ -63,6 +63,7 @@ header .stats span {{ margin: 0 8px; }}
     <option value="4zida">4zida.rs</option>
     <option value="halo_oglasi">Halo Oglasi</option>
     <option value="kupujemprodajem">KupujemProdajem</option>
+    <option value="cityexpert">Cityexpert</option>
   </select>
   <input type="number" id="minPrice" placeholder="最低价 €" oninput="applyFilters()" style="width:100px">
   <input type="number" id="maxPrice" placeholder="最高价 €" oninput="applyFilters()" style="width:100px">

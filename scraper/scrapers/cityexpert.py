@@ -24,7 +24,7 @@ class CityexpertScraper:
         page = urlopen(req, timeout=30).read().decode("utf-8")
 
         # Split page into card chunks by property-card class
-        cards = re.split(r'<div[^>]*class="[^"]*property-card[^"]*"[^>]*>', page)[1:]
+        cards = re.split(r'<div[^>]*class="[^"]*property-card--serp[^"]*"[^>]*>', page)[1:]
 
         seen = set()
         listings = []
