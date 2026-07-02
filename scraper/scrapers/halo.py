@@ -75,7 +75,8 @@ class HaloScraper(BaseScraper):
 
             for item in items:
                 try:
-                    price_str = re.sub(r'[^\d.]', '', item["price_text"].replace(",", ""))
+                    price_str = item["price_text"].replace(".", "").replace(",", "")
+                    price_str = re.sub(r'[^\d]', '', price_str)
                     if not price_str:
                         continue
                     price = float(price_str)
