@@ -26,12 +26,16 @@ class HaloScraper(BaseScraper):
         try:
             await page.goto(self.SEARCH_URL, wait_until="load", timeout=90000)
 
-            # Wait for Cloudflare challenge to pass (up to 40s)
-            for i in range(8):
+            # Wait for Cloudflare challenge to pass (up to 60s)
+            for i in range(12):
                 page_title = await page.title()
                 if "Just a moment" in page_title or "challenge" in page_title.lower():
-                    print(f"  Halo Oglasi: waiting for Cloudflare ({i+1}/8)...")
+                    print(f"  Halo Oglasi: waiting for Cloudflare ({i+1}/12)...")
                     await asyncio.sleep(5)
+                    # Reload page if still blocked after 30s
+                    if i == 5:
+                        await page.reload(wait_until="load")
+                        await asyncio.sleep(3)
                 else:
                     break
 
