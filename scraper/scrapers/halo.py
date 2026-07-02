@@ -12,6 +12,15 @@ class HaloScraper(BaseScraper):
     SEARCH_URL = "https://www.halooglasi.com/nekretnine/prodaja-stanova/beograd"
 
     async def scrape(self) -> List[Listing]:
+        # Retry up to 2 times if blocked by Cloudflare
+        for attempt in range(2):
+            listings = await self._try_scrape()
+            if listings is not None:
+                return listings
+            print(f"  Halo Oglasi: retrying (attempt {attempt+2}/2)...")
+        return []
+
+    async def _try_scrape(self) -> List[Listing] | None:
         page = await self.new_page()
         listings = []
         try:
@@ -103,4 +112,6 @@ class HaloScraper(BaseScraper):
                 ))
         finally:
             await page.close()
+        if not listings:
+            return None
         return listings
