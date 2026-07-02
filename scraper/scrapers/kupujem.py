@@ -20,7 +20,7 @@ class KupujemScraper(BaseScraper):
 
         async def on_response(resp):
             url = resp.url
-            if "/api/web/v1/" in url and "ingest.sentry" not in url:
+            if "ingest.sentry" not in url:
                 try:
                     ct = resp.headers.get("content-type", "")
                     if "json" in ct:
@@ -41,6 +41,7 @@ class KupujemScraper(BaseScraper):
                 print(f"  KP: found {has_ads} ad links after {i+1} polls")
                 break
 
+        print(f"  KP: captured {len(api_data)} API responses")
         # Extract API data
         for url, body in api_data:
             # Look for any endpoint that returns listing data
