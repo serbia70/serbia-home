@@ -10,7 +10,7 @@ from scraper.scrapers.base import BaseScraper
 
 class ZidaScraper(BaseScraper):
     BASE_URL = "https://www.4zida.rs"
-    SEARCH_URL = "https://www.4zida.rs/prodaja-stanova/beograd"
+    SEARCH_URL = "https://www.4zida.rs/prodaja-stanova/beograd/do-100000-evra"
 
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
