@@ -76,11 +76,13 @@ const DATA = {data_json};
 function sourceColor(s) {{
   if (s === '4zida') return 'var(--4zida)';
   if (s === 'halo_oglasi') return 'var(--halo)';
+  if (s === 'cityexpert') return 'var(--kp)';
   return 'var(--kp)';
 }}
 function sourceName(s) {{
   if (s === '4zida') return '4zida';
   if (s === 'halo_oglasi') return 'Halo';
+  if (s === 'cityexpert') return 'Cityexpert';
   return 'KP';
 }}
 
