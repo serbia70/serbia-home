@@ -35,7 +35,7 @@ class CityexpertScraper:
                 price = float(m.group(1).replace(".", ""))
             except ValueError:
                 continue
-            if 10000 < price <= 100000:
+            if 100000 >= price > 0:
                 price_positions.append((m.start(), price))
 
         # Match each price to its nearest link
@@ -53,7 +53,7 @@ class CityexpertScraper:
                     best_dist = dist
                     best_link = href
 
-            if not best_link or best_link in seen or best_dist > 1000:
+            if not best_link or best_link in seen or best_dist > 3000:
                 continue
             seen.add(best_link)
 
