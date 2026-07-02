@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from typing import List
 
@@ -18,60 +19,55 @@ class ZidaScraper(BaseScraper):
             await page.goto(self.SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(3)
 
-            # Extract all listing data from the DOM
+            # Extract listing data from JSON-LD
             items = await page.evaluate("""
                 () => {
-                    const cards = document.querySelectorAll('a[href*="/prodaja-stanova/"]');
+                    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
                     const results = [];
                     const seen = new Set();
 
-                    cards.forEach(card => {
-                        const href = card.getAttribute('href');
-                        if (!href || seen.has(href)) return;
+                    scripts.forEach(script => {
+                        try {
+                            const data = JSON.parse(script.textContent);
+                            // Look for ItemList with listing data
+                            if (data.itemListElement && data['@type'] === 'ItemList') {
+                                data.itemListElement.forEach(item => {
+                                    if (item.url && !seen.has(item.url)) {
+                                        seen.add(item.url);
+                                        const offer = item.itemOffered || {};
+                                        const offer_data = offer.offers || {};
+                                        const address = offer.address || {};
 
-                        // Filter: only listing detail pages (have a hex ID at the end)
-                        if (!href.match(/[a-f0-9]{20,}$/)) return;
-                        seen.add(href);
-
-                        const text = card.innerText || '';
-                        const priceMatch = text.match(/[\\d,.]+\\s*€/);
-                        const sqmMatch = text.match(/(\\d+)\\s*m²/);
-                        const roomsMatch = text.match(/(\\d+(?:\\.5)?)\\s*soba/);
-
-                        results.push({
-                            url: href.startsWith('http') ? href : 'https://www.4zida.rs' + href,
-                            title: text.split('\\n')[0] || '',
-                            price_text: priceMatch ? priceMatch[0] : '',
-                            area_text: sqmMatch ? sqmMatch[0] : '',
-                            rooms_text: roomsMatch ? roomsMatch[0] : '',
-                            full_text: text,
-                        });
+                                        results.push({
+                                            url: item.url,
+                                            name: item.name || '',
+                                            price: offer_data.price || 0,
+                                            currency: offer_data.priceCurrency || 'EUR',
+                                            area: offer.floorSize ? offer.floorSize.value : null,
+                                            rooms: offer.numberOfRooms || '',
+                                            location: address.addressLocality || address.addressCountry || '',
+                                        });
+                                    }
+                                });
+                            }
+                        } catch(e) {}
                     });
                     return results;
                 }
             """)
 
             for item in items:
-                try:
-                    price = float(re.sub(r'[^\d.]', '', item["price_text"].replace(",", "")))
-                except (ValueError, AttributeError):
-                    continue
+                price = float(item["price"])
                 if price > 100000:
-                    continue  # filter > 100k
-
-                area = None
-                if item["area_text"]:
-                    try:
-                        area = float(re.sub(r'[^\d.]', '', item["area_text"]))
-                    except ValueError:
-                        pass
+                    continue
 
                 listings.append(Listing(
                     id=listing_id(item["url"]),
-                    title=item["title"].strip() or f"Stan Beograd - {item['rooms_text']}",
+                    title=item.get("name", "") or f"Stan Beograd",
                     price_eur=price,
-                    area_sqm=area,
-                    rooms=item["rooms_text"],
+                    area_sqm=float(item["area"]) if item["area"] else None,
+                    rooms=str(item["rooms"]) if item["rooms"] else "",
+                    location=item.get("location", ""),
                     url=item["url"],
                     source="4zida",
                 ))

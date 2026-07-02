@@ -14,7 +14,14 @@ class BaseScraper(ABC):
     async def __aenter__(self):
         self._playwright_cm = async_playwright()
         playwright = await self._playwright_cm.__aenter__()
-        self.browser = await playwright.chromium.launch(headless=True)
+        self.browser = await playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
         return self
 
     async def __aexit__(self, *args):
