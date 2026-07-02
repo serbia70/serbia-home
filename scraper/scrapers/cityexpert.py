@@ -15,7 +15,6 @@ class CityexpertScraper:
 
     async def __aexit__(self, *args):
         pass
-    SEARCH_URL = "https://www.cityexpert.rs/prodaja-nekretnina/beograd"
 
     async def scrape(self) -> List[Listing]:
         listings = []
@@ -25,74 +24,55 @@ class CityexpertScraper:
         })
         html = urlopen(req, timeout=30).read().decode("utf-8")
 
-        # Parse listing cards from HTML
-        pattern = r'href="(/prodaja-nekretnina/beograd/(\d+)[^"]*)"[^>]*>.*?'
-        cards = re.findall(
-            r'<a[^>]*href="(/prodaja-nekretnina/beograd/\d+[^"]*)"[^>]*>'
-            r'.*?(\d[\d.]*)\s*€.*?'
-            r'(\d+)\s*m²',
-            html, re.DOTALL,
-        )
+        # Find all listing links
+        links = re.finditer(r'href="(/prodaja-nekretnina/beograd/\d+[^"]*)"', html)
+        seen = set()
 
-        if not cards:
-            # Broader fallback
-            links = re.findall(r'href="(/prodaja-nekretnina/beograd/\d+[^"]*)"', html)
-            seen = set()
-            for href in links:
-                if href in seen:
-                    continue
-                seen.add(href)
-                full_url = f"https://www.cityexpert.rs{href}"
-                # Find price near this link
-                idx = html.index(href)
-                chunk = html[idx:idx+2000]
-                price_m = re.search(r'(\d[\d.]*)\s*€', chunk)
-                area_m = re.search(r'(\d+)\s*m²', chunk)
-                title_m = re.search(r'alt="([^"]*)"', chunk)
+        for match in links:
+            href = match.group(1)
+            if href in seen:
+                continue
+            seen.add(href)
 
-                try:
-                    price_str = price_m.group(1).replace(".", "")
-                    price = float(price_str)
-                except (AttributeError, ValueError):
-                    continue
-                if price > 100000 or price == 0:
-                    continue
+            full_url = f"https://www.cityexpert.rs{href}"
 
-                area = None
-                if area_m:
-                    try:
-                        area = float(area_m.group(1))
-                    except ValueError:
-                        pass
+            # Extract the chunk around this link to find the price
+            start = max(0, match.start() - 500)
+            end = min(len(html), match.end() + 1500)
+            chunk = html[start:end]
 
-                listings.append(Listing(
-                    id=listing_id(full_url),
-                    title=(title_m.group(1) if title_m else "")[:100],
-                    price_eur=price,
-                    area_sqm=area,
-                    url=full_url,
-                    source="cityexpert",
-                ))
+            # Find price: look for "d+.d+ €" or "d+ €" patterns (European format)
+            price_m = re.search(r'>(\d{2,}\.\d{3})\s*€', chunk)
+            if not price_m:
+                price_m = re.search(r'>(\d{4,})\s*€', chunk)
 
-        else:
-            seen = set()
-            for href, _, price_str in cards:
-                if href in seen:
-                    continue
-                seen.add(href)
-                try:
-                    price = float(price_str.replace(".", ""))
-                except ValueError:
-                    continue
-                if price > 100000 or price == 0:
-                    continue
+            if not price_m:
+                continue
 
-                listings.append(Listing(
-                    id=listing_id(f"https://www.cityexpert.rs{href}"),
-                    title="",
-                    price_eur=price,
-                    url=f"https://www.cityexpert.rs{href}",
-                    source="cityexpert",
-                ))
+            try:
+                price = float(price_m.group(1).replace(".", ""))
+            except ValueError:
+                continue
+
+            if price > 100000 or price == 0:
+                continue
+
+            # Find area
+            area_m = re.search(r'(\d+)\s*m²', chunk)
+            area = float(area_m.group(1)) if area_m else None
+
+            # Find title/image
+            title_m = re.search(r'alt="([^"]*)"', chunk)
+            img_m = re.search(r'<img[^>]*src="([^"]*)"', chunk)
+
+            listings.append(Listing(
+                id=listing_id(full_url),
+                title=(title_m.group(1) if title_m else "")[:100],
+                price_eur=price,
+                area_sqm=area,
+                url=full_url,
+                source="cityexpert",
+                image_url=img_m.group(1) if img_m else None,
+            ))
 
         return listings
