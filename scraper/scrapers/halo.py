@@ -12,68 +12,47 @@ class HaloScraper(BaseScraper):
     SEARCH_URL = "https://www.halooglasi.com/nekretnine/prodaja-stanova/beograd"
 
     async def scrape(self) -> List[Listing]:
-        # Retry up to 2 times if blocked by Cloudflare
+        # Simple retry: sometimes Cloudflare passes, sometimes not
         for attempt in range(2):
             listings = await self._try_scrape()
-            if listings is not None:
+            if listings:
                 return listings
-            print(f"  Halo Oglasi: retrying (attempt {attempt+2}/2)...")
+            if attempt == 0:
+                print("  Halo Oglasi: retrying...")
         return []
 
     async def _try_scrape(self) -> List[Listing] | None:
         page = await self.new_page()
         listings = []
         try:
-            await page.goto(self.SEARCH_URL, wait_until="load", timeout=90000)
+            await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
+            await asyncio.sleep(5)
 
-            # Wait for Cloudflare challenge to pass (up to 60s)
-            for i in range(12):
-                page_title = await page.title()
-                if "Just a moment" in page_title or "challenge" in page_title.lower():
-                    print(f"  Halo Oglasi: waiting for Cloudflare ({i+1}/12)...")
-                    await asyncio.sleep(5)
-                    # Reload page if still blocked after 30s
-                    if i == 5:
-                        await page.reload(wait_until="load")
-                        await asyncio.sleep(3)
-                else:
-                    break
-
-            # Accept cookies if present
+            # Accept cookies
             try:
-                cookie_btn = await page.query_selector("button:has-text('Prihvati'), button:has-text('U redu'), button:has-text('Saglasan'), button:has-text('Accept')")
-                if cookie_btn:
-                    await cookie_btn.click()
-                    await asyncio.sleep(1)
-            except:
-                pass
-
-            # Wait for actual listing content
-            try:
-                await page.wait_for_function(
-                    "() => document.body.innerText.match(/\\d+\\s*€/)",
-                    timeout=15000,
-                )
+                for text in ["Prihvati", "U redu", "Saglasan", "Accept"]:
+                    btn = await page.query_selector(f"button:has-text('{text}')")
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(1)
+                        break
             except:
                 pass
 
             items = await page.evaluate("""
                 () => {
-                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article, [class*="result"], li[class*="ad"], [id*="oglas"], [class*="product-item"]');
+                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article, [class*="result"], li[class*="ad"], [id*="oglas"]');
                     const results = [];
                     const seen = new Set();
-
                     cards.forEach(card => {
                         const link = card.querySelector('a[href*="halooglasi"]') || card.querySelector('a[href*="/nekretnine"]') || card.closest('a');
                         const href = link ? link.getAttribute('href') : null;
                         if (!href || seen.has(href)) return;
                         seen.add(href);
-
                         const text = card.innerText || '';
-                        const priceMatch = text.match(/[\\d,.]+\\s*€/);
+                        const priceMatch = text.match(/[\\d.,]+\\s*€/);
                         const sqmMatch = text.match(/(\\d+)\\s*m²/);
                         const img = card.querySelector('img');
-
                         results.push({
                             url: href.startsWith('http') ? href : 'https://www.halooglasi.com' + (href.startsWith('/') ? '' : '/') + href,
                             price_text: priceMatch ? priceMatch[0] : '',
@@ -114,8 +93,7 @@ class HaloScraper(BaseScraper):
                     source="halo_oglasi",
                     image_url=item["image"],
                 ))
+
+            return listings if listings else None
         finally:
             await page.close()
-        if not listings:
-            return None
-        return listings
