@@ -1,0 +1,38 @@
+name: Daily Scrape
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # 13:00 Beijing time (UTC+8)
+  workflow_dispatch:       # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright
+          python -m playwright install chromium
+
+      - name: Run scraper
+        run: python scraper/main.py
+        continue-on-error: true
+
+      - name: Generate site
+        run: python scraper/site_generator.py
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
