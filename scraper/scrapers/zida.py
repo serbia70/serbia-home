@@ -19,33 +19,30 @@ class ZidaScraper(BaseScraper):
             await page.goto(self.SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(3)
 
-            # Extract listing data from JSON-LD
+            # Extract listing data from JSON-LD ItemList
             items = await page.evaluate("""
                 () => {
                     const scripts = document.querySelectorAll('script[type="application/ld+json"]');
                     const results = [];
                     const seen = new Set();
-
                     scripts.forEach(script => {
                         try {
                             const data = JSON.parse(script.textContent);
-                            // Look for ItemList with listing data
                             if (data.itemListElement && data['@type'] === 'ItemList') {
                                 data.itemListElement.forEach(item => {
                                     if (item.url && !seen.has(item.url)) {
                                         seen.add(item.url);
-                                        const offer = item.itemOffered || {};
-                                        const offer_data = offer.offers || {};
-                                        const address = offer.address || {};
-
+                                        const obj = item.item || {};
+                                        const offers = obj.offers || {};
+                                        const offered = obj.itemOffered || {};
+                                        const addr = (offered.address || {});
                                         results.push({
                                             url: item.url,
-                                            name: item.name || '',
-                                            price: offer_data.price || 0,
-                                            currency: offer_data.priceCurrency || 'EUR',
-                                            area: offer.floorSize ? offer.floorSize.value : null,
-                                            rooms: offer.numberOfRooms || '',
-                                            location: address.addressLocality || address.addressCountry || '',
+                                            name: obj.name || '',
+                                            price: offers.price || 0,
+                                            area: (offered.floorSize || {}).value || null,
+                                            rooms: offered.numberOfRooms || '',
+                                            location: addr.addressLocality || '',
                                         });
                                     }
                                 });
@@ -57,15 +54,20 @@ class ZidaScraper(BaseScraper):
             """)
 
             for item in items:
-                price = float(item["price"])
-                if price > 100000:
+                try:
+                    price = float(item["price"])
+                except (ValueError, TypeError):
                     continue
+                if price > 100000 or price == 0:
+                    continue
+
+                area = float(item["area"]) if item["area"] else None
 
                 listings.append(Listing(
                     id=listing_id(item["url"]),
-                    title=item.get("name", "") or f"Stan Beograd",
+                    title=item.get("name", "") or "Stan Beograd",
                     price_eur=price,
-                    area_sqm=float(item["area"]) if item["area"] else None,
+                    area_sqm=area,
                     rooms=str(item["rooms"]) if item["rooms"] else "",
                     location=item.get("location", ""),
                     url=item["url"],
