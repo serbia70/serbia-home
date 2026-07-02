@@ -17,44 +17,38 @@ class KupujemScraper(BaseScraper):
         listings = []
         try:
             await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
-            # Wait for SPA to load listings via API
-            await asyncio.sleep(8)
 
-            # Try to extract data from the rendered DOM
+            # Wait for SPA to load listings - wait for any link containing /oglasi/
+            try:
+                await page.wait_for_function(
+                    "() => document.querySelector('a[href*=\"/oglasi/\"]') !== null",
+                    timeout=20000,
+                )
+            except:
+                pass
+
+            # Give SPA extra time to render
+            await asyncio.sleep(3)
+
+            # Extract all listing links and their context from the page
             items = await page.evaluate("""
                 () => {
                     const results = [];
                     const seen = new Set();
-
-                    // Look for ad cards - KupujemProdajem uses CSS modules so class names are dynamic
-                    // Try multiple selectors
-                    const selectors = [
-                        'a[href*="/oglasi/"]',
-                        '[class*="AdCard"] a',
-                        '[class*="adCard"] a',
-                        '[class*="listing"] a',
-                        'article a[href]',
-                    ];
-
-                    let links = [];
-                    for (const sel of selectors) {
-                        const found = document.querySelectorAll(sel);
-                        if (found.length > 0) {
-                            links = Array.from(found);
-                            break;
-                        }
-                    }
+                    const links = document.querySelectorAll('a[href*="/oglasi/"]');
 
                     links.forEach(link => {
                         const href = link.getAttribute('href');
-                        if (!href || seen.has(href) || !href.includes('/oglasi/')) return;
+                        if (!href || seen.has(href)) return;
                         seen.add(href);
 
-                        // Get the parent card/container for text extraction
-                        const card = link.closest('div, article, li') || link;
-                        const text = card.innerText || link.innerText || '';
+                        // Walk up to find the card container
+                        let card = link;
+                        for (let i = 0; i < 5; i++) {
+                            if (card.parentElement) card = card.parentElement;
+                        }
 
-                        // Try to find price - look for numbers followed by € or EUR
+                        const text = card.innerText || link.innerText || '';
                         const priceMatch = text.match(/(\\d{1,3}(?:\\.?\\d{3})*)\\s*(€|EUR)/i);
                         const sqmMatch = text.match(/(\\d+)\\s*m²/);
                         const img = card.querySelector('img');

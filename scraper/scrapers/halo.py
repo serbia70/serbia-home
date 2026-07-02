@@ -15,9 +15,16 @@ class HaloScraper(BaseScraper):
         page = await self.new_page()
         listings = []
         try:
-            await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
-            # Halo Oglasi may have Cloudflare - wait and retry
-            await asyncio.sleep(5)
+            await page.goto(self.SEARCH_URL, wait_until="load", timeout=90000)
+
+            # Wait for Cloudflare challenge to pass (up to 40s)
+            for i in range(8):
+                page_title = await page.title()
+                if "Just a moment" in page_title or "challenge" in page_title.lower():
+                    print(f"  Halo Oglasi: waiting for Cloudflare ({i+1}/8)...")
+                    await asyncio.sleep(5)
+                else:
+                    break
 
             # Accept cookies if present
             try:
@@ -28,15 +35,18 @@ class HaloScraper(BaseScraper):
             except:
                 pass
 
-            # Check if blocked by Cloudflare
-            page_title = await page.title()
-            if "Just a moment" in page_title:
-                print("  Halo Oglasi: blocked by Cloudflare, waiting longer...")
-                await asyncio.sleep(15)
+            # Wait for actual listing content
+            try:
+                await page.wait_for_function(
+                    "() => document.body.innerText.match(/\\d+\\s*€/)",
+                    timeout=15000,
+                )
+            except:
+                pass
 
             items = await page.evaluate("""
                 () => {
-                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article, [class*="result"], li[class*="ad"]');
+                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article, [class*="result"], li[class*="ad"], [id*="oglas"], [class*="product-item"]');
                     const results = [];
                     const seen = new Set();
 
