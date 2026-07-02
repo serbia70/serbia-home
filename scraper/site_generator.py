@@ -128,12 +128,11 @@ def generate_site(data: dict):
     listings = data.get("listings", [])
     new_today = sum(1 for l in listings if l.get("first_seen") == today)
 
-    html = TEMPLATE.format(
-        update_time=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        total=len(listings),
-        new_today=new_today,
-        data_json=json.dumps(listings, ensure_ascii=False),
-    )
+    html = TEMPLATE
+    html = html.replace("{update_time}", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    html = html.replace("{total}", str(len(listings)))
+    html = html.replace("{new_today}", str(new_today))
+    html = html.replace("{data_json}", json.dumps(listings, ensure_ascii=False))
 
     with open(DATA_DIR / "index.html", "w") as f:
         f.write(html)

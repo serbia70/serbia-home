@@ -15,7 +15,7 @@ class ZidaScraper(BaseScraper):
         page = await self.new_page()
         listings = []
         try:
-            await page.goto(self.SEARCH_URL, wait_until="networkidle", timeout=30000)
+            await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
             await asyncio.sleep(3)
 
             # Extract all listing data from the DOM

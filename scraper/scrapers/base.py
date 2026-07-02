@@ -9,15 +9,19 @@ class BaseScraper(ABC):
 
     def __init__(self):
         self.browser: Browser | None = None
+        self._playwright = None
 
     async def __aenter__(self):
         p = await async_playwright().__aenter__()
+        self._playwright = p
         self.browser = await p.chromium.launch(headless=True)
         return self
 
     async def __aexit__(self, *args):
         if self.browser:
             await self.browser.close()
+        if self._playwright:
+            await self._playwright.__aexit__(*args)
 
     async def new_page(self) -> Page:
         context = await self.browser.new_context(

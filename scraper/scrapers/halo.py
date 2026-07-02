@@ -15,22 +15,28 @@ class HaloScraper(BaseScraper):
         page = await self.new_page()
         listings = []
         try:
-            await page.goto(self.SEARCH_URL, wait_until="networkidle", timeout=45000)
+            await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
             # Halo Oglasi may have Cloudflare - wait and retry
             await asyncio.sleep(5)
 
             # Accept cookies if present
             try:
-                cookie_btn = await page.query_selector("button:has-text('Prihvati'), button:has-text('U redu'), button:has-text('Saglasan')")
+                cookie_btn = await page.query_selector("button:has-text('Prihvati'), button:has-text('U redu'), button:has-text('Saglasan'), button:has-text('Accept')")
                 if cookie_btn:
                     await cookie_btn.click()
                     await asyncio.sleep(1)
             except:
                 pass
 
+            # Check if blocked by Cloudflare
+            page_title = await page.title()
+            if "Just a moment" in page_title:
+                print("  Halo Oglasi: blocked by Cloudflare, waiting longer...")
+                await asyncio.sleep(15)
+
             items = await page.evaluate("""
                 () => {
-                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article');
+                    const cards = document.querySelectorAll('[class*="oglas"], [class*="listing"], [class*="card"], [class*="product"], article, [class*="result"], li[class*="ad"]');
                     const results = [];
                     const seen = new Set();
 
@@ -58,13 +64,22 @@ class HaloScraper(BaseScraper):
             """)
 
             for item in items:
-                price = float(re.sub(r'[^\d.]', '', item["price_text"].replace(",", "")))
+                try:
+                    price_str = re.sub(r'[^\d.]', '', item["price_text"].replace(",", ""))
+                    if not price_str:
+                        continue
+                    price = float(price_str)
+                except (ValueError, AttributeError):
+                    continue
                 if price > 100000 or price == 0:
                     continue
 
                 area = None
                 if item["area_text"]:
-                    area = float(re.sub(r'[^\d.]', '', item["area_text"]))
+                    try:
+                        area = float(re.sub(r'[^\d.]', '', item["area_text"]))
+                    except ValueError:
+                        pass
 
                 listings.append(Listing(
                     id=listing_id(item["url"]),
