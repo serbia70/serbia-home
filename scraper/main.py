@@ -8,12 +8,13 @@ from scraper.scrapers.zida import ZidaScraper
 from scraper.scrapers.halo import HaloScraper
 from scraper.scrapers.kupujem import KupujemScraper
 from scraper.scrapers.cityexpert import CityexpertScraper
+from scraper.scrapers.nekretnine import NekretnineScraper
 from scraper.utils import save_listings
 
 
 async def main():
     all_listings = []
-    scrapers = [ZidaScraper, HaloScraper, KupujemScraper, CityexpertScraper]
+    scrapers = [ZidaScraper, HaloScraper, KupujemScraper, NekretnineScraper, CityexpertScraper]
 
     for scraper_cls in scrapers:
         name = scraper_cls.__name__.replace("Scraper", "")
