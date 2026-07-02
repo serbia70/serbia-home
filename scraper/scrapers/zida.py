@@ -36,6 +36,7 @@ class ZidaScraper(BaseScraper):
                                         const offers = obj.offers || {};
                                         const offered = obj.itemOffered || {};
                                         const addr = (offered.address || {});
+                                        const img = obj.image || {};
                                         results.push({
                                             url: item.url,
                                             name: obj.name || '',
@@ -43,6 +44,7 @@ class ZidaScraper(BaseScraper):
                                             area: (offered.floorSize || {}).value || null,
                                             rooms: offered.numberOfRooms || '',
                                             location: addr.addressLocality || '',
+                                            image: img.contentUrl || img.url || '',
                                         });
                                     }
                                 });
@@ -72,6 +74,7 @@ class ZidaScraper(BaseScraper):
                     location=item.get("location", ""),
                     url=item["url"],
                     source="4zida",
+                    image_url=item.get("image"),
                 ))
         finally:
             await page.close()

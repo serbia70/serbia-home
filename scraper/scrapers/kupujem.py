@@ -9,7 +9,7 @@ from scraper.scrapers.base import BaseScraper
 
 class KupujemScraper(BaseScraper):
     BASE_URL = "https://www.kupujemprodajem.com"
-    SEARCH_URL = "https://www.kupujemprodajem.com/pretraga?pretraga=stan+beograd&cena_max=100000&kategorija=23"
+    SEARCH_URL = "https://www.kupujemprodajem.com/pretraga?pretraga=stan+beograd&kategorija=23"
 
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
