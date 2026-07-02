@@ -15,7 +15,7 @@ class ZidaScraper(BaseScraper):
         page = await self.new_page()
         listings = []
         try:
-            await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
+            await page.goto(self.SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(3)
 
             # Extract all listing data from the DOM
@@ -52,13 +52,19 @@ class ZidaScraper(BaseScraper):
             """)
 
             for item in items:
-                price = float(re.sub(r'[^\d.]', '', item["price_text"].replace(",", "")))
+                try:
+                    price = float(re.sub(r'[^\d.]', '', item["price_text"].replace(",", "")))
+                except (ValueError, AttributeError):
+                    continue
                 if price > 100000:
                     continue  # filter > 100k
 
                 area = None
                 if item["area_text"]:
-                    area = float(re.sub(r'[^\d.]', '', item["area_text"]))
+                    try:
+                        area = float(re.sub(r'[^\d.]', '', item["area_text"]))
+                    except ValueError:
+                        pass
 
                 listings.append(Listing(
                     id=listing_id(item["url"]),
