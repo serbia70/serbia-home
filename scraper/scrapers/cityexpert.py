@@ -10,6 +10,13 @@ class CityexpertScraper:
     """SSR site - no Playwright needed, use direct HTTP requests."""
     SEARCH_URL = "https://www.cityexpert.rs/prodaja-nekretnina/beograd"
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+    SEARCH_URL = "https://www.cityexpert.rs/prodaja-nekretnina/beograd"
+
     async def scrape(self) -> List[Listing]:
         listings = []
         req = Request(self.SEARCH_URL, headers={

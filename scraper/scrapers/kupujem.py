@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 from typing import List
 
 from scraper.models import Listing
@@ -15,43 +14,28 @@ class KupujemScraper(BaseScraper):
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
         listings = []
-        api_urls_seen = set()
+        api_urls = set()
 
         async def on_response(response):
             url = response.url
-            if url in api_urls_seen:
+            if url in api_urls:
                 return
-            api_urls_seen.add(url)
+            api_urls.add(url)
             if "/api/web/v1/" not in url:
                 return
+            if "ingest.sentry" in url:
+                return
+            print(f"  KP API hit: {url}")
             try:
-                body = await response.json()
-                if isinstance(body, dict) and body.get("success") and body.get("data"):
-                    items = body["data"]
-                    if isinstance(items, list) and len(items) > 0:
-                        for ad in items:
-                            try:
-                                ad_id = ad.get("id", "")
-                                price = float(ad.get("price", ad.get("priceValue", 0)) or 0)
-                                title = ad.get("name", ad.get("title", "")) or ""
-                                area = ad.get("area", ad.get("areaSqm", 0)) or None
-                                if price <= 0 or price > 100000 or not ad_id:
-                                    continue
-                                listings.append(Listing(
-                                    id=listing_id(str(ad_id)),
-                                    title=str(title)[:100],
-                                    price_eur=price,
-                                    area_sqm=float(area) if area else None,
-                                    url=f"https://www.kupujemprodajem.com/oglasi/{ad_id}",
-                                    source="kupujemprodajem",
-                                ))
-                            except (ValueError, AttributeError):
-                                continue
+                if "application/json" in (response.headers.get("content-type", "")):
+                    body = await response.json()
+                    data_preview = json.dumps(body, ensure_ascii=False)[:500]
+                    print(f"  KP API data: {data_preview}")
             except Exception:
                 pass
 
         page.on("response", on_response)
         await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
-        await asyncio.sleep(12)
+        await asyncio.sleep(15)
         await page.close()
         return listings
