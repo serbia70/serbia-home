@@ -23,8 +23,8 @@ class CityexpertScraper:
         })
         page = urlopen(req, timeout=30).read().decode("utf-8")
 
-        # Split page into card chunks by property-card class
-        cards = re.split(r'<div[^>]*class="[^"]*property-card--serp[^"]*"[^>]*>', page)[1:]
+        # Split page into card chunks
+        cards = re.split(r'<div _ngcontent[^>]+class="tw-relative" style="height: 150px;">', page)[1:]
 
         seen = set()
         listings = []
@@ -54,13 +54,15 @@ class CityexpertScraper:
             area_m = re.search(r'(\d+)\s*m²', card)
             area = float(area_m.group(1)) if area_m else None
 
-            # Extract alt text from images
-            img_m = re.search(r'<img[^>]*src="([^"]*)"', card)
-            title_m = re.search(r'alt="([^"]*)"', card)
+            # Extract place info (when available)
+            place_m = re.search(r'class="property-card__place[^"]*"[^>]*>([^<]+)', card)
+
+            # Extract title from URL slug (e.g., "dvosoban-stan-stanoja-glavasa-palilula")
+            title = href.split("/")[-1].replace("-", " ").strip() if "/" in href else ""
 
             listings.append(Listing(
                 id=listing_id(f"https://www.cityexpert.rs{href}"),
-                title=html_mod.unescape(title_m.group(1))[:100] if title_m else "",
+                title=html_mod.unescape(place_m.group(1).strip()) if place_m else title[:100],
                 price_eur=price,
                 area_sqm=area,
                 url=f"https://www.cityexpert.rs{href}",

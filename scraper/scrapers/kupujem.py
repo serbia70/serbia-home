@@ -1,11 +1,35 @@
 import asyncio
-import json
 import re
 from typing import List
 
 from scraper.models import Listing
 from scraper.utils import listing_id
 from scraper.scrapers.base import BaseScraper
+
+# Beograd municipalities and neighborhoods for location matching
+BEOGRAD_KEYWORDS = [
+    "beograd", "beograde", "bEOGRADA",
+    "novi beograd", "zemun", "voždovac", "vozdovac",
+    "čukarica", "cukarica", "palilula", "zvezdara",
+    "rakovica", "grocka", "lazarevac", "mladenovac",
+    "obrenovac", "sopot", "surčin", "surcin", "barajevo",
+    "savski venac", "stari grad", "vrčin", "vrcin",
+    "borča", "borca", "mirijevo", "kaluđerica", "kaludjerica",
+    "bežanija", "bezAnija", "leštane", "lestane",
+    "medaković", "medakovic", "braće jerković", "brace jerkovic",
+    "konjarnik", "banovo brdo", "ban brdo",
+    "cerak", "vidikovac", "labudovo brdo", "lab brdo",
+    "selo rakovica",
+]
+
+
+def _is_belgrade(text: str) -> bool:
+    """Check if listing text mentions Belgrade or its municipalities."""
+    lower = text.lower()
+    for kw in BEOGRAD_KEYWORDS:
+        if kw in lower:
+            return True
+    return False
 
 
 class KupujemScraper(BaseScraper):
@@ -27,7 +51,6 @@ class KupujemScraper(BaseScraper):
             if has_ads > 0:
                 break
 
-        # Try to extract from DOM
         items = await page.evaluate("""
             () => {
                 const ads = [];
@@ -39,14 +62,21 @@ class KupujemScraper(BaseScraper):
                     seen.add(href);
                     const card = a.closest('div,li,article') || a;
                     const text = card.innerText || '';
+
+                    // Extract location: find the first meaningful address line
+                    const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 3);
+                    const skipWords = ['vlasnik', 'agencija', 'investitor', '€', 'm²', 'soba', 'sprat', 'www'];
+                    const locationLine = lines.find(l => !skipWords.some(w => l.toLowerCase().includes(w))) || '';
+
                     const priceMatch = text.match(/([\\d.]+)\\s*(€|EUR)/i);
-                    const sqmMatch = text.match(/(\\d+)\\s*m²/);
+                    const sqmMatch = text.match(/(\\d+[\\.,]?\\d*)\\s*m²/);
                     const img = card.querySelector('img');
                     ads.push({
                         url: href.startsWith('http') ? href : window.location.origin + href,
                         price_text: priceMatch ? priceMatch[0] : '',
                         area_text: sqmMatch ? sqmMatch[0] : '',
-                        full_text: text.substr(0, 400),
+                        location: locationLine,
+                        full_text: text.substring(0, 400),
                         image: img ? (img.getAttribute('src') || img.getAttribute('data-src') || '') : '',
                     });
                 });
@@ -55,6 +85,10 @@ class KupujemScraper(BaseScraper):
         """)
 
         for item in items:
+            # Skip if not in Belgrade
+            if not _is_belgrade(item["full_text"]):
+                continue
+
             try:
                 p = item["price_text"].replace(".", "").replace("€", "").replace("EUR", "").strip()
                 price = float(p) if p else 0
@@ -62,17 +96,20 @@ class KupujemScraper(BaseScraper):
                 continue
             if price > 100000 or price <= 0:
                 continue
+
             area = None
             if item["area_text"]:
                 try:
-                    area = float(re.sub(r'[^\d]', '', item["area_text"]))
+                    area = float(re.sub(r'[^\d.,]', '', item["area_text"]).replace(",", "."))
                 except ValueError:
                     pass
+
             listings.append(Listing(
                 id=listing_id(item["url"]),
-                title=item["full_text"].split("\n")[0].strip()[:100],
+                title=item.get("location", "") or item["full_text"].split("\n")[0].strip()[:100],
                 price_eur=price,
                 area_sqm=area,
+                location=item.get("location", ""),
                 url=item["url"],
                 source="kupujemprodajem",
                 image_url=item["image"],
