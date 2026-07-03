@@ -20,6 +20,8 @@ class BaseScraper(ABC):
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
             ],
         )
         return self
@@ -40,14 +42,65 @@ class BaseScraper(ABC):
             viewport={"width": 1920, "height": 1080},
             locale="sr-RS",
             timezone_id="Europe/Belgrade",
+            permissions=["geolocation"],
+            extra_http_headers={
+                "Accept-Language": "sr-RS,en-US;q=0.9,sr;q=0.8",
+            },
         )
         page = await context.new_page()
 
-        # Evade bot detection
+        # Comprehensive anti-detection script
         await page.add_init_script("""
+            // Override webdriver flag
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['sr-RS', 'en-US'] });
+
+            // Override plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1,2,3,4,5],
+            });
+
+            // Override languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['sr-RS', 'en-US', 'en'],
+            });
+
+            // Override Chrome runtime
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {},
+            };
+
+            // Override permissions
+            if (navigator.permissions) {
+                const origQuery = navigator.permissions.query;
+                navigator.permissions.query = function(p) {
+                    if (p.name === 'notifications') {
+                        return Promise.resolve({state: 'denied'});
+                    }
+                    return origQuery.call(this, p);
+                };
+            }
+
+            // Hide headless by overriding connection
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    downlink: 10,
+                    effectiveType: '4g',
+                    rtt: 50,
+                }),
+            });
+
+            // Override hardware concurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8,
+            });
+
+            // Override deviceMemory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8,
+            });
         """)
 
         return page

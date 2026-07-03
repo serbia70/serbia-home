@@ -9,50 +9,87 @@ from scraper.scrapers.base import BaseScraper
 
 class NekretnineScraper(BaseScraper):
     BASE_URL = "https://www.nekretnine.rs"
-    SEARCH_URL = "https://www.nekretnine.rs/"
+    SEARCH_URL = "https://www.nekretnine.rs/prodaja-stanova/beograd/"
 
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
-        listings = []
+        all_listings = []
 
-        await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
-        await asyncio.sleep(3)
-
-        # Find and click search link for "stanovi prodaja Beograd"
-        # The site is a Next.js SPA - navigate to search page via app routing
-        await page.goto("https://www.nekretnine.rs/prodaja-stanova-beograd/",
-                        wait_until="load", timeout=30000)
-
-        # Wait for SPA to render
-        for i in range(6):
-            await asyncio.sleep(5)
-            # Check if any listing content appeared
-            has_content = await page.evaluate(
-                "document.body.innerText.length"
-            )
-            if has_content and has_content > 5000:
+        for page_num in range(1, 6):
+            url = self.SEARCH_URL if page_num == 1 else f"{self.SEARCH_URL}?pag={page_num}"
+            listings = await self._scrape_page(page, url)
+            all_listings.extend(listings)
+            print(f"  Nekretnine page {page_num}: {len(listings)} listings (under €100k)")
+            if len(listings) == 0:
                 break
 
-        # Extract listing data from rendered page
+        await page.close()
+        return all_listings
+
+    async def _scrape_page(self, page, url: str) -> List[Listing]:
+        listings = []
+
+        await page.goto(url, wait_until="load", timeout=60000)
+
+        try:
+            btn = await page.query_selector(
+                "button:has-text('PRIHVATANJE I ZATVARANJE'), button:has-text('prihvatanje')"
+            )
+            if btn:
+                await btn.click()
+                await asyncio.sleep(2)
+        except:
+            pass
+
+        # Wait for SPA to render listing cards
+        for i in range(6):
+            await asyncio.sleep(5)
+            has_cards = await page.evaluate(
+                "document.querySelectorAll('[class*=\"Property_card\"], [class*=\"ListItem_item__card\"]').length"
+            )
+            if has_cards > 0:
+                break
+
+        # Scroll to trigger lazy loading of all cards
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(3)
+
+        # Extract listing data from rendered cards
         items = await page.evaluate("""
             () => {
                 const results = [];
                 const seen = new Set();
 
-                // Try broader approach - find any links with price patterns
-                const allLinks = document.querySelectorAll('a');
-                allLinks.forEach(link => {
+                // Cards use dynamic CSS module classes; find by parent container
+                const cardLinks = document.querySelectorAll('a[href*="/oglasi/"]');
+                cardLinks.forEach(link => {
                     const href = link.getAttribute('href');
                     if (!href || seen.has(href)) return;
-                    const parent = link.closest('div,li,article') || link;
-                    const text = parent.innerText || '';
-                    if (!text.match(/\\d+\\s*€/)) return;
+                    seen.add(href);
+
+                    // Walk up to find the card container with all text
+                    let card = link.closest('[class*="ListItem_item"], [class*="Property_card"]');
+                    if (!card) card = link.closest('li, div, article');
+                    if (!card) card = link;
+
+                    const text = card.innerText || '';
+                    if (!text.match(/€/)) return;
+
+                    const priceMatch = text.match(/€[\\s]*([\\d.]+)/);
+                    const sqmMatch = text.match(/(\\d+)\\s*m²/);
+                    const roomMatch = text.match(/(\\d+)\\s*(sobe|soba)/i) || text.match(/(Jednosoban|Jednoiposoban|Dvosoban|Trosoban|Četvorosoban|Petosoban)/i);
+                    const img = card.querySelector('img');
+                    const location = text.split('\\n').filter(l => l.includes('Beograd') || l.includes('beograd') || l.includes('Novi Sad') || l.includes('Zemun') || l.includes('Novi Beograd'))[0] || '';
 
                     results.push({
-                        url: href.startsWith('http') ? href : 'https://www.nekretnine.rs' + (href.startsWith('/') ? '' : '/') + href,
-                        full_text: text.substr(0, 500),
+                        url: href.startsWith('http') ? href : 'https://www.nekretnine.rs' + href,
+                        price_text: priceMatch ? priceMatch[0] : '',
+                        area_text: sqmMatch ? sqmMatch[0] : '',
+                        rooms_text: roomMatch ? roomMatch[0] : '',
+                        location: location.trim(),
+                        full_text: text.substring(0, 500),
+                        image: img ? (img.getAttribute('src') || img.getAttribute('data-src') || '') : '',
                     });
-                    seen.add(href);
                 });
 
                 return results;
@@ -61,25 +98,32 @@ class NekretnineScraper(BaseScraper):
 
         for item in items:
             try:
-                price_m = re.search(r'([\d.]+)\s*€', item["full_text"])
-                if not price_m:
+                price_str = item["price_text"].replace("€", "").replace(" ", "").replace(".", "")
+                if not price_str:
                     continue
-                price = float(price_m.group(1).replace(".", ""))
+                price = float(price_str)
             except (ValueError, AttributeError):
                 continue
             if price > 100000 or price == 0:
                 continue
 
-            area_m = re.search(r'(\d+)\s*m²', item["full_text"])
+            area = None
+            if item["area_text"]:
+                try:
+                    area = float(re.sub(r'[^\d]', '', item["area_text"]))
+                except ValueError:
+                    pass
 
             listings.append(Listing(
                 id=listing_id(item["url"]),
                 title=item["full_text"].split("\n")[0].strip()[:100],
                 price_eur=price,
-                area_sqm=float(area_m.group(1)) if area_m else None,
+                area_sqm=area,
+                rooms=item.get("rooms_text", ""),
+                location=item.get("location", ""),
                 url=item["url"],
                 source="nekretnine",
+                image_url=item["image"],
             ))
 
-        await page.close()
         return listings

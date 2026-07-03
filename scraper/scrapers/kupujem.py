@@ -10,26 +10,11 @@ from scraper.scrapers.base import BaseScraper
 
 class KupujemScraper(BaseScraper):
     BASE_URL = "https://www.kupujemprodajem.com"
-    SEARCH_URL = "https://www.kupujemprodajem.com/pretraga?pretraga=stan+beograd&kategorija=23"
+    SEARCH_URL = "https://www.kupujemprodajem.com/nekretnine-prodaja/stanovi/pretraga?categoryId=2821&groupId=2822&priceTo=100000&currency=eur&ignoreUserId=no"
 
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
         listings = []
-
-        # Capture API responses to find listing data
-        api_responses = []
-
-        async def on_response(resp):
-            url = resp.url
-            ct = resp.headers.get("content-type", "")
-            if "json" in ct and "sentry" not in url and "google" not in url and "facebook" not in url:
-                try:
-                    body = await resp.json()
-                    api_responses.append((url, body))
-                except:
-                    pass
-
-        page.on("response", on_response)
 
         await page.goto(self.SEARCH_URL, wait_until="load", timeout=60000)
 
@@ -37,7 +22,7 @@ class KupujemScraper(BaseScraper):
         for i in range(6):
             await asyncio.sleep(5)
             has_ads = await page.evaluate(
-                "document.querySelectorAll('a[href*=\"/oglasi/\"]').length"
+                "document.querySelectorAll('a[href*=\"/oglas/\"]').length"
             )
             if has_ads > 0:
                 break
@@ -47,7 +32,7 @@ class KupujemScraper(BaseScraper):
             () => {
                 const ads = [];
                 const seen = new Set();
-                const links = document.querySelectorAll('a[href*="/oglasi/"]');
+                const links = document.querySelectorAll('a[href*="/oglas/"]');
                 links.forEach(a => {
                     const href = a.getAttribute('href');
                     if (!href || seen.has(href)) return;
