@@ -35,9 +35,21 @@ def save_listings(listings: List[Listing]):
 
     for listing in listings:
         if listing.id in prev:
-            listing.first_seen = prev[listing.id].get("first_seen", today)
+            prev_item = prev[listing.id]
+            listing.first_seen = prev_item.get("first_seen", today)
+
+            # Track price history
+            prev_history = prev_item.get("price_history") or []
+            prev_price = prev_item.get("price_eur")
+            if prev_price is not None and abs(prev_price - listing.price_eur) > 0.01:
+                # Price changed — append new point
+                listing.price_history = prev_history + [{"date": today, "price": listing.price_eur}]
+            else:
+                # Price unchanged — keep existing history
+                listing.price_history = prev_history
         else:
             listing.first_seen = today
+            listing.price_history = [{"date": today, "price": listing.price_eur}]
 
     all_items = {l.id: l.to_dict() for l in listings}
     output = {
