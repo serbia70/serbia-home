@@ -12,6 +12,37 @@ class ZidaScraper(BaseScraper):
     BASE_URL = "https://www.4zida.rs"
     SEARCH_URL = "https://www.4zida.rs/prodaja-stanova/beograd/do-100000-evra"
 
+    async def _fetch_publish_date(self, url: str) -> str | None:
+        page = await self.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(1)
+            date_str = await page.evaluate("""
+                () => {
+                    const m = document.body.innerText.match(/ažuriran[:\\s]+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})/i);
+                    return m ? m[1] : null;
+                }
+            """)
+            if date_str:
+                parts = date_str.split(".")
+                return f"{parts[2]}-{parts[1]}-{parts[0]}"
+            return None
+        except Exception:
+            return None
+        finally:
+            await page.close()
+
+    async def _fetch_dates_batch(self, urls: list[str], batch_size: int = 5) -> dict[str, str]:
+        results = {}
+        for i in range(0, len(urls), batch_size):
+            batch = urls[i:i + batch_size]
+            tasks = [self._fetch_publish_date(url) for url in batch]
+            dates = await asyncio.gather(*tasks)
+            for url, date in zip(batch, dates):
+                if date:
+                    results[url] = date
+        return results
+
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
         listings = []
@@ -78,4 +109,12 @@ class ZidaScraper(BaseScraper):
                 ))
         finally:
             await page.close()
+
+        # Fetch publish dates from detail pages
+        if listings:
+            urls = [l.url for l in listings]
+            dates = await self._fetch_dates_batch(urls)
+            for listing in listings:
+                listing.published_at = dates.get(listing.url)
+
         return listings

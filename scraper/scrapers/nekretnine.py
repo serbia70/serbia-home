@@ -11,6 +11,33 @@ class NekretnineScraper(BaseScraper):
     BASE_URL = "https://www.nekretnine.rs"
     SEARCH_URL = "https://www.nekretnine.rs/prodaja-stanova/beograd/"
 
+    async def _fetch_publish_date(self, url: str) -> str | None:
+        page = await self.new_page()
+        try:
+            await page.goto(url, wait_until="load", timeout=30000)
+            await asyncio.sleep(1)
+            try:
+                btn = await page.query_selector("button:has-text('PRIHVATANJE')")
+                if btn:
+                    await btn.click()
+                    await asyncio.sleep(1)
+            except:
+                pass
+            date_str = await page.evaluate("""
+                () => {
+                    const m = document.body.innerText.match(/ažuriran[:\\s]+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})/i);
+                    return m ? m[1] : null;
+                }
+            """)
+            if date_str:
+                parts = date_str.split(".")
+                return f"{parts[2]}-{parts[1]}-{parts[0]}"
+            return None
+        except Exception:
+            return None
+        finally:
+            await page.close()
+
     async def scrape(self) -> List[Listing]:
         page = await self.new_page()
         all_listings = []
@@ -24,6 +51,13 @@ class NekretnineScraper(BaseScraper):
                 break
 
         await page.close()
+
+        # Fetch publish dates from detail pages
+        if all_listings:
+            for listing in all_listings:
+                date = await self._fetch_publish_date(listing.url)
+                listing.published_at = date
+
         return all_listings
 
     async def _scrape_page(self, page, url: str) -> List[Listing]:
