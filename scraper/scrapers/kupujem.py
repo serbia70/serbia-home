@@ -1,5 +1,6 @@
 import asyncio
 import re
+from datetime import datetime, timedelta
 from typing import List
 
 from scraper.models import Listing
@@ -30,6 +31,32 @@ def _is_belgrade(text: str) -> bool:
         if kw in lower:
             return True
     return False
+
+
+def _parse_relative_date(text: str) -> str | None:
+    """Parse Serbian relative date like 'Pre 2 dana' to YYYY-MM-DD."""
+    if not text:
+        return None
+    today = datetime.now()
+    lower = text.lower().strip()
+    if "danas" in lower:
+        return today.strftime("%Y-%m-%d")
+    m = re.search(r'pre\s+(\d+)\s*(dan|dana|sat|sati|sata|minut|minuta|nedelj|nedelje|mesec|meseci|meseca)', lower)
+    if not m:
+        return None
+    n = int(m.group(1))
+    unit = m.group(2)
+    if unit.startswith("dan"):
+        return (today - timedelta(days=n)).strftime("%Y-%m-%d")
+    if unit.startswith("sat"):
+        return today.strftime("%Y-%m-%d")
+    if unit.startswith("minut"):
+        return today.strftime("%Y-%m-%d")
+    if unit.startswith("nedelj"):
+        return (today - timedelta(weeks=n)).strftime("%Y-%m-%d")
+    if unit.startswith("mesec"):
+        return (today - timedelta(days=n * 30)).strftime("%Y-%m-%d")
+    return None
 
 
 class KupujemScraper(BaseScraper):
@@ -71,6 +98,10 @@ class KupujemScraper(BaseScraper):
                     const priceMatch = text.match(/([\\d.]+)\\s*(€|EUR)/i);
                     const sqmMatch = text.match(/(\\d+[\\.,]?\\d*)\\s*m²/);
                     const img = card.querySelector('img');
+
+                    // Look for relative date text (e.g. "Pre 2 dana", "Pre 5 sati", "Danas")
+                    const dateMatch = text.match(/(pre\\s+\\d+\\s*(dan[a]?|sat[a]?|minut[a]?|mesec[a]?)|danas|pre\\s+nedelj[a]?)/i);
+
                     ads.push({
                         url: href.startsWith('http') ? href : window.location.origin + href,
                         price_text: priceMatch ? priceMatch[0] : '',
@@ -78,6 +109,7 @@ class KupujemScraper(BaseScraper):
                         location: locationLine,
                         full_text: text.substring(0, 400),
                         image: img ? (img.getAttribute('src') || img.getAttribute('data-src') || '') : '',
+                        date_text: dateMatch ? dateMatch[0] : '',
                     });
                 });
                 return ads;
@@ -113,6 +145,7 @@ class KupujemScraper(BaseScraper):
                 url=item["url"],
                 source="kupujemprodajem",
                 image_url=item["image"],
+                published_at=_parse_relative_date(item.get("date_text", "")),
             ))
 
         await page.close()

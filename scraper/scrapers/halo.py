@@ -102,6 +102,9 @@ class HaloScraper(BaseScraper):
                         const descEl = p.querySelector('.product-description');
                         const descText = descEl ? descEl.innerText.trim() : '';
 
+                        const dateEl = p.querySelector('.publish-date');
+                        const dateText = dateEl ? dateEl.innerText.trim() : '';
+
                         results.push({
                             url: href.startsWith('http') ? href : 'https://www.halooglasi.com' + href,
                             price_text: priceText,
@@ -111,6 +114,7 @@ class HaloScraper(BaseScraper):
                             location: location,
                             full_text: (title + ' ' + descText + ' ' + locations.join(' ')),
                             image: imgSrc,
+                            date_text: dateText,
                         });
                     });
 
@@ -134,6 +138,17 @@ class HaloScraper(BaseScraper):
                     except ValueError:
                         pass
 
+                # Parse publish date (format: 04.07.2026.)
+                published_at = None
+                if item.get("date_text"):
+                    try:
+                        dt = item["date_text"].rstrip(".")
+                        parts = dt.split(".")
+                        if len(parts) == 3:
+                            published_at = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                    except (ValueError, IndexError):
+                        pass
+
                 listings.append(Listing(
                     id=listing_id(item["url"]),
                     title=item.get("title", "") or item["full_text"].split("\n")[0].strip()[:100],
@@ -144,6 +159,7 @@ class HaloScraper(BaseScraper):
                     url=item["url"],
                     source="halo_oglasi",
                     image_url=item.get("image"),
+                    published_at=published_at,
                 ))
 
             return listings

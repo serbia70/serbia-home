@@ -222,7 +222,7 @@ function applyFilters() {
     if (src !== 'all' && d.source !== src) return false;
     if (d.price_eur < minP || d.price_eur > maxP) return false;
     if ((d.area_sqm || 0) < minA) return false;
-    if (cutoff && d.first_seen < cutoff) return false;
+    if (cutoff && (d.published_at || d.first_seen) < cutoff) return false;
     return true;
   });
 
