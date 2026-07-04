@@ -60,6 +60,9 @@ class CityexpertScraper:
             # Extract title from URL slug (e.g., "dvosoban-stan-stanoja-glavasa-palilula")
             title = href.split("/")[-1].replace("-", " ").strip() if "/" in href else ""
 
+            # Extract image
+            img_m = re.search(r'<img[^>]+src="(https?://[^"]+)"', card)
+
             listings.append(Listing(
                 id=listing_id(f"https://www.cityexpert.rs{href}"),
                 title=html_mod.unescape(place_m.group(1).strip()) if place_m else title[:100],
