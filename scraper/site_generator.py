@@ -146,7 +146,7 @@ function toggleWatch(id) {
 
 function daysAgo(N) {
   const d = new Date();
-  d.setDate(d.getDate() - N);
+  d.setDate(d.getDate() - Math.max(0, N - 1));
   return d.toISOString().slice(0, 10);
 }
 
