@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 DATA_DIR = Path("site")
@@ -307,12 +308,13 @@ applyFilters();
 
 
 def generate_site(data: dict):
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now(ZoneInfo("Europe/Belgrade"))
+    today = now.strftime("%Y-%m-%d")
     listings = data.get("listings", [])
     new_today = sum(1 for l in listings if l.get("first_seen") == today)
 
     html = TEMPLATE
-    html = html.replace("{update_time}", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    html = html.replace("{update_time}", now.strftime("%Y-%m-%d %H:%M"))
     html = html.replace("{total}", str(len(listings)))
     html = html.replace("{new_today}", str(new_today))
     html = html.replace("{data_json}", json.dumps(listings, ensure_ascii=False))
